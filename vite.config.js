@@ -9,5 +9,9 @@ export default defineConfig({
     alias: {
       '@': path.resolve(__dirname, 'src')
     }
-  }
+  },
+  base: './', // Ensures relative paths for assets
+  build: {
+    outDir: 'dist', // Default output directory
+  },
 })
