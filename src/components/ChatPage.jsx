@@ -9,17 +9,12 @@ import { PlusCircle, Code, FileText, FileQuestion, ContrastIcon as CompareIcon }
 import Prism from "prismjs"
 import "prismjs/themes/prism-tomorrow.css"
 import * as diff from "diff"
+import { JsonRpcClient } from "@calimero-network/calimero-client"
+import { getNodeUrl, getConfigAndJwt } from "@/helpers/helper"
 
-const initialContent = [
-  { id: 1, user: "User 1", content: "function hello() {\n  console.log('Hello, World!');\n}" },
-  { id: 2, user: "User 2", content: "Research findings on climate change impact" },
-  { id: 3, user: "User 1", content: "const sum = (a, b) => a + b;" },
-  { id: 4, user: "User 3", content: "Ideas for new product features" },
-  { id: 5, user: "User 2", content: "Latest data on renewable energy adoption" },
-]
 
 function ChatPage() {
-  const [contents, setContents] = useState(initialContent)
+  const [contents, setContents] = useState([])
   const [selectedContent, setSelectedContent] = useState(null)
   const [contentType, setContentType] = useState("other")
   const [newUser, setNewUser] = useState("")
@@ -28,6 +23,39 @@ function ChatPage() {
   const [compareMode, setCompareMode] = useState(false)
   const [compareContent1, setCompareContent1] = useState(null)
   const [compareContent2, setCompareContent2] = useState(null)
+
+  useEffect(() => {
+    const loadAllContent = async () => {
+      const rpcClient = new JsonRpcClient(
+        getNodeUrl(),
+        '/jsonrpc',
+      );
+
+      const { jwtObject, config, error } = getConfigAndJwt();
+      if (error) {
+        return { error };
+      }
+      // Execute a method
+      const response = await rpcClient.execute({
+        contextId: jwtObject.context_id,
+        method: "get_all_entries",
+        argsJson: { username: "ijlal123", content: "A super man" },
+        executorPublicKey: jwtObject.executor_public_key,
+      },
+        config,
+      );
+      if (response.error) {
+        return;
+      }
+      const data = response.result.output;
+      for (let i = 0; i < data.length; i++) {
+        data[i]["id"] = i;
+      }
+      setContents(data);
+    }
+
+    loadAllContent();
+  }, [])
 
   useEffect(() => {
     if (selectedContent) {
@@ -47,19 +75,52 @@ function ChatPage() {
     }
   }
 
-  const handleAddContent = (e) => {
+  const handleAddContent = async (e) => {
     e.preventDefault()
     if (newUser.trim() && newContent.trim()) {
       const newItem = {
         id: contents.length + 1,
-        user: newUser.trim(),
+        username: newUser.trim(),
         content: newContent.trim(),
       }
-      setContents([...contents, newItem])
-      setNewUser("")
-      setNewContent("")
-      setIsFormVisible(false)
+      const result = await saveNewContent(newItem);
+      if (result) {
+        setContents([...contents, newItem])
+        setNewUser("")
+        setNewContent("")
+        setIsFormVisible(false)
+      }
+      else{
+        console.log("error: ", result);
+      }
     }
+  }
+
+  const saveNewContent = async (newContent) => {
+    const rpcClient = new JsonRpcClient(
+      getNodeUrl(),
+      '/jsonrpc',
+    );
+
+    const { jwtObject, config, error } = getConfigAndJwt();
+    if (error) {
+      return { error };
+    }
+    // Execute a method
+    const response = await rpcClient.execute({
+      contextId: jwtObject.context_id,
+      method: "create_content",
+      argsJson: { username: newContent.username, content: newContent.content },
+      executorPublicKey: jwtObject.executor_public_key,
+    },
+      config,
+    );
+    console.log(response);
+    if (response.error) {
+      return false;
+    }
+    return true;
+
   }
 
   const beautifyCode = (code) => {
@@ -151,14 +212,13 @@ function ChatPage() {
                   <Button
                     onClick={() => handleContentSelect(item)}
                     variant="ghost"
-                    className={`w-full justify-start mb-2 text-left hover:bg-gray-700 transition-colors ${
-                      (compareContent1 && compareContent1.id === item.id) ||
+                    className={`w-full justify-start mb-2 text-left hover:bg-gray-700 transition-colors ${(compareContent1 && compareContent1.id === item.id) ||
                       (compareContent2 && compareContent2.id === item.id)
-                        ? "bg-teal-700"
-                        : ""
-                    }`}
+                      ? "bg-teal-700"
+                      : ""
+                      }`}
                   >
-                    <span className="font-medium">{item.user}</span>
+                    <span className="font-medium">{item.username}</span>
                   </Button>
                 </motion.div>
               ))}
@@ -179,13 +239,13 @@ function ChatPage() {
                 <h2 className="text-2xl font-bold mb-4 text-amber-300">Content Comparison</h2>
                 {compareContent1 && (
                   <div className="mb-4">
-                    <h3 className="text-xl font-bold mb-2 text-teal-300">{compareContent1.user}'s Content</h3>
+                    <h3 className="text-xl font-bold mb-2 text-teal-300">{compareContent1.username}'s Content</h3>
                     {renderContent(compareContent1.content)}
                   </div>
                 )}
                 {compareContent2 && (
                   <div className="mb-4">
-                    <h3 className="text-xl font-bold mb-2 text-teal-300">{compareContent2.user}'s Content</h3>
+                    <h3 className="text-xl font-bold mb-2 text-teal-300">{compareContent2.username}'s Content</h3>
                     {renderContent(compareContent2.content)}
                   </div>
                 )}
@@ -199,7 +259,7 @@ function ChatPage() {
                 exit={{ opacity: 0, y: -20 }}
                 transition={{ duration: 0.3 }}
               >
-                <h2 className="text-2xl font-bold mb-4 text-amber-300">{selectedContent.user}'s Content</h2>
+                <h2 className="text-2xl font-bold mb-4 text-amber-300">{selectedContent.username}'s Content</h2>
                 {renderContent(selectedContent.content)}
               </motion.div>
             ) : (
